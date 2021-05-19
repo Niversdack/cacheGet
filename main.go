@@ -1,34 +1,50 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
-	"fmt"
+	"effective-group-test/cache"
+	"github.com/gin-gonic/gin"
+	"github.com/pelletier/go-toml"
 	"log"
 	"net/http"
 	"net/http/httputil"
 )
 
 const (
-	backURL = "4pda.ru"
-	port = "8080"
-	maxCountCache=2
+	scheme = "https://"
 )
-func  ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "count is %d\n", )
-}
 
-func main()  {
-	http.HandleFunc("/endpoint", ServeHTTP)
+func main() {
+	config, _ := toml.LoadFile("config.toml")
+	backURL := config.Get("main.URL").(string)
+	port := config.Get("main.Port").(string)
+	maxCountCache := config.Get("Cache.MaxSize").(int64)
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
-
-	req, err := http.NewRequest("GET", backURL, nil)
-
+	cache := cache.New(uint64(maxCountCache))
+	Serve := gin.Default()
+	Serve.Use(gin.Recovery())
+	any := Serve.Group("/")
+	any.GET("/", func(c *gin.Context) {
+		body, found := cache.Get(scheme + backURL)
+		if !found {
+			dump := Dump(scheme + backURL)
+			cache.Set(backURL, dump)
+			body = &dump
+		}
+		c.Data(http.StatusOK, "text/html", *body)
+	})
+	err := Serve.Run(port)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+}
+func Dump(Url string) []byte {
+
+	req, err := http.NewRequest("GET", Url, nil)
+
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 
@@ -41,20 +57,5 @@ func main()  {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// write to disk, or something
-	// ...
-
-	// wrap the cached response
-
-	r := bufio.NewReader(bytes.NewReader(body))
-	// ReadResponse by default assumes the request for the response was a "GET" requested
-	// If you want the method to be different, you must pass an http.Request to ReadResponse (instead of nil)
-	resp, err = http.ReadResponse(r, nil)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("%#v", resp)
+	return body
 }
