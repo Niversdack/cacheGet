@@ -1,0 +1,5 @@
+[main]
+URL="google.com"
+Port=":8080"
+[Cache]
+MaxSize=3
